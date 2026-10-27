@@ -1,0 +1,94 @@
+def REPO_URL = 'https://github.com/apisit110/pos-cashier.git'
+
+// service (folder ใน apps/) = ชื่อ package = ชื่อ image (pos-cashier/<service>)
+def SERVICES = [
+    'cashier-api-gateway',
+    'cashier-app',
+    'cashier-authen-service',
+    'cashier-members-service',
+    'cashier-orders-service',
+    'cashier-products-service',
+    'cashier-sync-service',
+    'cashier-terminal-service',
+    'cashier-transactions-service',
+]
+
+pipeline {
+    agent any
+
+    parameters {
+        // ต้องติดตั้ง Git Parameter plugin
+        gitParameter(
+            name: 'BRANCH',
+            type: 'PT_BRANCH',
+            branchFilter: 'origin/(release.*)',
+            defaultValue: 'release/1.0.0',
+            selectedValue: 'TOP',
+            sortMode: 'DESCENDING_SMART',
+            listSize: '0', // 0 = แสดงเป็น dropdown
+            useRepository: REPO_URL,
+            description: 'เลือก release branch ที่จะ build'
+        )
+        booleanParam(name: 'cashier-api-gateway', defaultValue: false)
+        booleanParam(name: 'cashier-app', defaultValue: false)
+        booleanParam(name: 'cashier-authen-service', defaultValue: false)
+        booleanParam(name: 'cashier-members-service', defaultValue: false)
+        booleanParam(name: 'cashier-orders-service', defaultValue: false)
+        booleanParam(name: 'cashier-products-service', defaultValue: false)
+        booleanParam(name: 'cashier-sync-service', defaultValue: false)
+        booleanParam(name: 'cashier-terminal-service', defaultValue: false)
+        booleanParam(name: 'cashier-transactions-service', defaultValue: false)
+    }
+
+    environment {
+        DOCKER_BUILDKIT = '1'
+        IMAGE_TAG = "${(params.BRANCH ?: '').replace('release/', '')}"
+    }
+
+    stages {
+        stage('Validate') {
+            steps {
+                script {
+                    if (!params.BRANCH) {
+                        error 'ไม่ได้เลือก BRANCH'
+                    }
+                    env.SELECTED = SERVICES.findAll { params[it] }.join(' ')
+                    if (!env.SELECTED) {
+                        error 'ต้องเลือกอย่างน้อย 1 service'
+                    }
+                    echo "Branch: ${params.BRANCH}"
+                    echo "Services: ${env.SELECTED}"
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                git branch: params.BRANCH, url: REPO_URL
+            }
+        }
+
+        stage('Build Images') {
+            steps {
+                script {
+                    env.SELECTED.split(' ').each { svc ->
+                        def image = "pos-cashier/${svc}:${env.IMAGE_TAG}"
+                        stage(svc) {
+                            if (svc == 'cashier-app') {
+                                // @apisit110/pos-ui อยู่บน GitHub Packages ต้องใช้ token ส่งเป็น build secret
+                                withCredentials([string(credentialsId: 'github-packages-token', variable: 'NODE_AUTH_TOKEN')]) {
+                                    sh """
+                                        docker build -f apps/${svc}/Dockerfile -t ${image} \\
+                                          --secret id=NODE_AUTH_TOKEN,env=NODE_AUTH_TOKEN .
+                                    """
+                                }
+                            } else {
+                                sh "docker build -f apps/${svc}/Dockerfile -t ${image} ."
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,23 @@
+services:
+  jenkins:
+    build: ./jenkins/Dockerfile
+    image: lab-jenkins:lts-jdk21
+    container_name: jenkins
+    restart: unless-stopped
+    user: root
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    ports:
+      - "8080:8080"   # Web UI
+      - "50000:50000" # Inbound agent (JNLP)
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
+      - TZ=Asia/Bangkok
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      # ให้ Jenkins สั่ง docker บน host ได้ (docker CLI ติดตั้งไว้ใน jenkins/Dockerfile)
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  jenkins_home:
