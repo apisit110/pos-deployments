@@ -10,6 +10,14 @@ resource "aws_cloudfront_origin_access_control" "pos_center_cloudfront_s3_oac" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_function" "viewer_request" {
+  name    = "pos-center-viewer-request"
+  runtime = "cloudfront-js-2.0"
+  comment = "SPA rewrite to index.html"
+  publish = true
+  code    = file("${path.module}/functions/viewer-request.js")
+}
+
 resource "aws_cloudfront_distribution" "s3_distribution" {
   origin {
     domain_name              = aws_s3_bucket.pos_center.bucket_regional_domain_name
@@ -57,6 +65,11 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
       cookies {
         forward = "none"
       }
+    }
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.viewer_request.arn
     }
 
     viewer_protocol_policy = "redirect-to-https"
