@@ -3,26 +3,6 @@
 
 locals {
   portal_service_function_name = "portal-service"
-
-  tags = {
-    Team        = var.team
-    Project     = var.project
-    Environment = var.environment
-  }
-}
-
-# IAM role for Lambda execution
-data "aws_iam_policy_document" "lambda_assume_role" {
-  statement {
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-
-    actions = ["sts:AssumeRole"]
-  }
 }
 
 resource "aws_iam_role" "portal_service" {

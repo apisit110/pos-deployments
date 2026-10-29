@@ -47,3 +47,23 @@ variable "portal_origin" {
   type        = string
   description = "origin ของหน้าเว็บ portal สำหรับ CORS เช่น https://xxxx.cloudfront.net"
 }
+
+# ---------- pos-sync-service (Lambda) ----------
+
+variable "pos_sync_service_database_url" {
+  type        = string
+  description = "connection string ของ database ที่ pos-sync-service ใช้"
+  sensitive   = true
+}
+
+variable "pos_sync_service_jwt_secret" {
+  type        = string
+  description = "SYNC_JWT_SECRET ของ pos-sync-service"
+  sensitive   = true
+}
+
+variable "pos_sync_service_origin_secret" {
+  type        = string
+  description = "ค่า header x-origin-secret ที่ client ต้องส่งมาเมื่อเรียก Function URL ของ pos-sync-service (แยกจาก origin_secret ของ CloudFront)"
+  sensitive   = true
+}

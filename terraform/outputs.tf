@@ -11,3 +11,8 @@ output "portal_service_function_url" {
   description = "ใช้เป็น origin ของ CloudFront สำหรับ /api/*"
   value       = aws_lambda_function_url.portal_service.function_url
 }
+
+output "pos_sync_service_function_url" {
+  description = "endpoint ของ pos-sync-service ให้ client เรียกตรง (ไม่ผ่าน CloudFront)"
+  value       = aws_lambda_function_url.pos_sync_service.function_url
+}

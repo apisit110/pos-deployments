@@ -38,6 +38,8 @@ pipeline {
         CLOUDFRONT_DISTRIBUTION_ID = ''
         // portal-service deploy เป็น zip ไปที่ Lambda
         PORTAL_SERVICE_FUNCTION = 'portal-service'
+        // pos-sync-service deploy เป็น zip ไปที่ Lambda
+        POS_SYNC_SERVICE_FUNCTION = 'pos-sync-service'
     }
 
     stages {
@@ -140,10 +142,35 @@ pipeline {
             }
         }
 
+        // pos-sync-service ไม่ได้เป็น image แต่ build เป็น zip แล้วอัปขึ้น Lambda
         stage('pos-sync-service') {
             when { expression { params['pos-sync-service'] } }
-            steps {
-                sh "docker build -f apps/pos-sync-service/Dockerfile -t pos-center/pos-sync-service:${env.IMAGE_TAG} ."
+            stages {
+                stage('Build Lambda Package') {
+                    steps {
+                        // Dockerfile.lambda มี stage สุดท้ายเป็น scratch ที่มีแค่ pos-sync-service.zip -> --output เขียนลง apps/pos-sync-service/dist-lambda
+                        sh '''
+                            rm -rf apps/pos-sync-service/dist-lambda
+                            docker build -f apps/pos-sync-service/Dockerfile.lambda \\
+                              --output type=local,dest=apps/pos-sync-service/dist-lambda .
+                            test -f apps/pos-sync-service/dist-lambda/pos-sync-service.zip
+                        '''
+                    }
+                }
+
+                stage('Deploy to Lambda') {
+                    steps {
+                        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                            sh '''
+                                aws lambda update-function-code --function-name "$POS_SYNC_SERVICE_FUNCTION" \\
+                                  --zip-file fileb://apps/pos-sync-service/dist-lambda/pos-sync-service.zip
+
+                                # รอให้ deploy เสร็จ ถ้า update ล้มเหลว stage จะ fail
+                                aws lambda wait function-updated-v2 --function-name "$POS_SYNC_SERVICE_FUNCTION"
+                            '''
+                        }
+                    }
+                }
             }
         }
     }

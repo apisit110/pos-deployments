@@ -49,7 +49,10 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
       "Sid": "DeployLambda",
       "Effect": "Allow",
       "Action": ["lambda:UpdateFunctionCode", "lambda:GetFunction"],
-      "Resource": "arn:aws:lambda:ap-southeast-1:<ACCOUNT_ID>:function:portal-service"
+      "Resource": [
+        "arn:aws:lambda:ap-southeast-1:<ACCOUNT_ID>:function:portal-service",
+        "arn:aws:lambda:ap-southeast-1:<ACCOUNT_ID>:function:pos-sync-service"
+      ]
     }
   ]
 }
