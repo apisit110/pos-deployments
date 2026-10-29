@@ -31,6 +31,11 @@ pipeline {
     environment {
         DOCKER_BUILDKIT = '1'
         IMAGE_TAG = "${(params.BRANCH ?: '').replace('release/', '')}"
+        // portal deploy เป็น static ไปที่ S3 + CloudFront (ดู terraform/)
+        AWS_REGION = 'ap-southeast-1'
+        PORTAL_BUCKET = 'lab-pos-cashier-center'
+        // terraform output cloudfront_distribution_id (เว้นว่าง = ไม่ invalidate)
+        CLOUDFRONT_DISTRIBUTION_ID = ''
     }
 
     stages {
@@ -56,27 +61,62 @@ pipeline {
             }
         }
 
-        stage('Build Images') {
-            steps {
-                script {
-                    env.SELECTED.split(' ').each { svc ->
-                        def image = "pos-center/${svc}:${env.IMAGE_TAG}"
-                        stage(svc) {
-                            if (svc == 'portal') {
-                                // @apisit110/pos-ui อยู่บน GitHub Packages ต้องใช้ token ส่งเป็น build secret
-                                // Dockerfile ของ portal ใช้ secret id ตัวเล็ก (node_auth_token)
-                                withCredentials([string(credentialsId: 'github-packages-token', variable: 'NODE_AUTH_TOKEN')]) {
-                                    sh """
-                                        docker build -f apps/${svc}/Dockerfile -t ${image} \\
-                                          --secret id=node_auth_token,env=NODE_AUTH_TOKEN .
-                                    """
-                                }
-                            } else {
-                                sh "docker build -f apps/${svc}/Dockerfile -t ${image} ."
-                            }
+        // portal ไม่ได้เป็น image แต่ export เป็น static แล้วขึ้น S3 + CloudFront
+        stage('portal') {
+            when { expression { params['portal'] } }
+            stages {
+                stage('Export Portal') {
+                    environment {
+                        // @apisit110/pos-ui อยู่บน GitHub Packages ต้องใช้ token ส่งเป็น build secret
+                        NODE_AUTH_TOKEN = credentials('github-packages-token')
+                    }
+                    steps {
+                        // Dockerfile.export มี stage สุดท้ายเป็น scratch ที่มีแค่ไฟล์ static -> --output เขียนลง apps/portal/out
+                        sh '''
+                            rm -rf apps/portal/out
+                            docker build -f apps/portal/Dockerfile.export \\
+                              --secret id=node_auth_token,env=NODE_AUTH_TOKEN \\
+                              --output type=local,dest=apps/portal/out .
+                            test -f apps/portal/out/index.html
+                        '''
+                    }
+                }
+
+                stage('Upload to S3') {
+                    steps {
+                        // aws cli ติดตั้งไว้ใน jenkins/Dockerfile
+                        // ต้องติดตั้ง AWS Credentials plugin และสร้าง credential ชนิด AWS ชื่อ aws-credentials
+                        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                            sh '''
+                                # ไฟล์ใน _next/static มี hash ในชื่อ cache ได้ยาว
+                                aws s3 sync apps/portal/out/_next/static "s3://$PORTAL_BUCKET/_next/static" \\
+                                  --delete --cache-control "public,max-age=31536000,immutable"
+                                
+                                # ที่เหลือ (html ฯลฯ) ต้องเช็คใหม่ทุกครั้งให้เห็น release ใหม่ทันที
+                                aws s3 sync apps/portal/out "s3://$PORTAL_BUCKET" \\
+                                  --delete --exclude "_next/static/*" --cache-control "no-cache"
+                                
+                                if [ -n "$CLOUDFRONT_DISTRIBUTION_ID" ]; then
+                                  aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
+                                fi
+                            '''
                         }
                     }
                 }
+            }
+        }
+
+        stage('portal-service') {
+            when { expression { params['portal-service'] } }
+            steps {
+                sh "docker build -f apps/portal-service/Dockerfile -t pos-center/portal-service:${env.IMAGE_TAG} ."
+            }
+        }
+
+        stage('pos-sync-service') {
+            when { expression { params['pos-sync-service'] } }
+            steps {
+                sh "docker build -f apps/pos-sync-service/Dockerfile -t pos-center/pos-sync-service:${env.IMAGE_TAG} ."
             }
         }
     }

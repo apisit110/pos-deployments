@@ -12,3 +12,12 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
  && rm -rf /var/lib/apt/lists/*
+
+# aws cli v2 สำหรับ deploy portal (static) ขึ้น S3 + invalidate CloudFront
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends unzip \
+ && curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
+ && unzip -q /tmp/awscliv2.zip -d /tmp \
+ && /tmp/aws/install \
+ && rm -rf /tmp/aws /tmp/awscliv2.zip /var/lib/apt/lists/* \
+ && aws --version
