@@ -6,3 +6,8 @@ output "cloudfront_distribution_id" {
 output "cloudfront_domain_name" {
   value = aws_cloudfront_distribution.s3_distribution.domain_name
 }
+
+output "portal_service_function_url" {
+  description = "ใช้เป็น origin ของ CloudFront สำหรับ /api/*"
+  value       = aws_lambda_function_url.portal_service.function_url
+}

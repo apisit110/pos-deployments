@@ -44,6 +44,12 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
       "Effect": "Allow",
       "Action": "cloudfront:CreateInvalidation",
       "Resource": "arn:aws:cloudfront::<ACCOUNT_ID>:distribution/<DISTRIBUTION_ID>"
+    },
+    {
+      "Sid": "DeployLambda",
+      "Effect": "Allow",
+      "Action": ["lambda:UpdateFunctionCode", "lambda:GetFunction"],
+      "Resource": "arn:aws:lambda:ap-southeast-1:<ACCOUNT_ID>:function:portal-service"
     }
   ]
 }
@@ -66,3 +72,7 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 สร้าง pipeline
 
 ทดสอบรัน
+
+
+- IAM ของ terraform ต้อง manual สร้างเอง
+- IAM ของ jenkins ต้อง manual สร้างเอง

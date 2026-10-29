@@ -36,6 +36,8 @@ pipeline {
         PORTAL_BUCKET = 'lab-pos-cashier-center'
         // terraform output cloudfront_distribution_id (เว้นว่าง = ไม่ invalidate)
         CLOUDFRONT_DISTRIBUTION_ID = ''
+        // portal-service deploy เป็น zip ไปที่ Lambda
+        PORTAL_SERVICE_FUNCTION = 'portal-service'
     }
 
     stages {
@@ -106,10 +108,35 @@ pipeline {
             }
         }
 
+        // portal-service ไม่ได้เป็น image แต่ build เป็น zip แล้วอัปขึ้น Lambda
         stage('portal-service') {
             when { expression { params['portal-service'] } }
-            steps {
-                sh "docker build -f apps/portal-service/Dockerfile -t pos-center/portal-service:${env.IMAGE_TAG} ."
+            stages {
+                stage('Build Lambda Package') {
+                    steps {
+                        // Dockerfile.lambda มี stage สุดท้ายเป็น scratch ที่มีแค่ portal-service.zip -> --output เขียนลง apps/portal-service/dist-lambda
+                        sh '''
+                            rm -rf apps/portal-service/dist-lambda
+                            docker build -f apps/portal-service/Dockerfile.lambda \\
+                              --output type=local,dest=apps/portal-service/dist-lambda .
+                            test -f apps/portal-service/dist-lambda/portal-service.zip
+                        '''
+                    }
+                }
+
+                stage('Deploy to Lambda') {
+                    steps {
+                        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                            sh '''
+                                aws lambda update-function-code --function-name "$PORTAL_SERVICE_FUNCTION" \\
+                                  --zip-file fileb://apps/portal-service/dist-lambda/portal-service.zip
+
+                                # รอให้ deploy เสร็จ ถ้า update ล้มเหลว stage จะ fail
+                                aws lambda wait function-updated-v2 --function-name "$PORTAL_SERVICE_FUNCTION"
+                            '''
+                        }
+                    }
+                }
             }
         }
 
